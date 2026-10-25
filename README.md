@@ -25,6 +25,7 @@ Windows 桌面挂件：一张半透明小卡片常驻屏幕角落，点一下就
 **键盘板载配置切换**
 通过原生 HID（usagePage `0xFF60`）给键盘发一条 32 字节命令，让固件自己在板载槽位之间切换。
 整套配置（灯效 / RT / 行程 / DKS / 键位映射）一次性跟着变，约 1 秒完成，**只读不改数据**。
+开发设备为**梵塔 Fuzzy 60 V2**（ATK Hub 固件），详见「兼容设备」。
 
 **界面**
 - 三列并排，窗口拉宽列就变宽、设备名自动少省略，拉窄自动省略，悬停看全名
@@ -83,26 +84,63 @@ pip install PyQt5
 python kb_onboard.py --get        :: 读当前板载配置
 python kb_onboard.py --set 4      :: 切到板载配置 4
 python audio_core.py              :: 列出音频设备与当前默认
+python hid_core.py --usage-page FF60   :: 列出所有 RawHID 接口（查键盘 VID/PID）
 ```
+
+## 兼容设备
+
+### 已实测通过
+
+| 键盘 | VID:PID | 固件 / 配置软件 | 状态 |
+| --- | --- | --- | --- |
+| **梵塔 Fuzzy 60 V2** | `373B:1267` | ATK Hub | ✅ 板载配置 1~4 读取与切换全部实测通过 |
+
+本项目的板载配置切换功能就是在这把键盘上开发和验证的，固件为 ATK Hub。
+
+### 其他 ATK 键盘
+
+ATK Hub 管理下的键盘走的是同一套 VIA 风格的命令空间（RawHID，usagePage `0xFF60`），
+板载配置切换用的是通用命令段，**理论上 ATK 的键盘都支持点选切换板载配置**，
+差别通常只在 VID/PID 和槽位数量。
+
+如果你的 ATK 键盘没反应，按顺序排查：
+
+1. 枚举 RawHID 接口，确认能看到 `usagePage = 0xFF60` 这一条，记下 VID/PID：
+
+   ```bat
+   python hid_core.py --usage-page FF60
+   ```
+
+   梵塔 Fuzzy 60 V2 的输出长这样：
+
+   ```
+   VID=373B PID=1267 usagePage=FF60 usage=97 in=385 out=385  Fuzzy 60 V2
+   ```
+
+2. 把 `kb_onboard.py` 顶部的 `VID` / `PID` 改成你的；
+3. 跑 `python kb_onboard.py --get`，能读回索引就说明协议对得上；读不到多半是固件版本不同，
+   命令段常量（`150` / `35`）需要自行探测。
+
+也欢迎把你试出来的型号和 VID/PID 提 PR 补充到上面这张表里。
 
 ## 适配你的键盘
 
 `kb_onboard.py` 顶部改这三个值即可：
 
 ```python
-VID = 0x373B          # 厂商 ID
-PID = 0x1267          # 产品 ID
-USAGE_PAGE = 0xFF60   # RawHID 接口
+VID = 0x373B          # 厂商 ID（梵塔 Fuzzy 60 V2）
+PID = 0x1267          # 产品 ID（梵塔 Fuzzy 60 V2）
+USAGE_PAGE = 0xFF60   # RawHID 接口（VIA / VIAL 通用）
 ```
 
-命令帧（VIA 风格）：
+命令帧（VIA 风格，梵塔 Fuzzy 60 V2 / ATK Hub 固件实测）：
 
 | 操作 | 帧 |
 | --- | --- |
 | 读当前板载配置 | `[2, 150, 35]` → 响应 `res[4]` = 索引 |
 | 切到第 N 套 | `[3, 150, 35, index]`（index **0-based**） |
 
-协议常量是公开的 VIA/VIAL 命令空间上的厂商扩展，实际值因固件而异，可用
+这几个常量属于 VIA/VIAL 公开命令空间上的厂商扩展，实际值因固件而异，可用
 `hid_core.py` 枚举设备后自行探测。
 
 ## 文件结构
@@ -126,8 +164,11 @@ USAGE_PAGE = 0xFF60   # RawHID 接口
 
 ## 说明
 
-本项目是个人自用工具，仅使用 Windows 公开 API 与键盘固件的标准 HID 接口进行通信，
-不包含也不分发任何第三方软件的源代码。
+本项目是个人自用工具，与 ATK、梵塔（Velota）之间没有隶属或合作关系——ATK Hub 在此
+仅作为键盘固件与配置软件的名称被提及。
+
+项目只通过 Windows 公开 API 和键盘的标准 HID 接口通信，**切换板载配置的实现是独立完成的，
+不需要安装也不依赖 ATK Hub 运行**；仓库不包含、也不分发 ATK Hub 或任何第三方软件的源代码。
 
 ## License
 
